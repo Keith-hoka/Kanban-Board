@@ -1,13 +1,17 @@
 import { expect, test } from "@playwright/test";
+import { login, resetBoard } from "./helpers";
+
+test.beforeEach(async ({ page }) => {
+  await login(page);
+  await resetBoard(page);
+});
 
 test("loads the kanban board", async ({ page }) => {
-  await page.goto("/");
   await expect(page.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
   await expect(page.locator('[data-testid^="column-"]')).toHaveCount(5);
 });
 
 test("adds a card to a column", async ({ page }) => {
-  await page.goto("/");
   const firstColumn = page.locator('[data-testid^="column-"]').first();
   await firstColumn.getByRole("button", { name: /add a card/i }).click();
   await firstColumn.getByPlaceholder("Card title").fill("Playwright card");
@@ -17,7 +21,6 @@ test("adds a card to a column", async ({ page }) => {
 });
 
 test("moves a card between columns", async ({ page }) => {
-  await page.goto("/");
   const card = page.getByTestId("card-card-1");
   const targetColumn = page.getByTestId("column-col-review");
   const cardBox = await card.boundingBox();
@@ -38,4 +41,25 @@ test("moves a card between columns", async ({ page }) => {
   );
   await page.mouse.up();
   await expect(targetColumn.getByTestId("card-card-1")).toBeVisible();
+});
+
+test("persists a new card across reload", async ({ page }) => {
+  const firstColumn = page.locator('[data-testid^="column-"]').first();
+
+  // Wait for the debounced PUT triggered by adding the card.
+  const saved = page.waitForResponse(
+    (res) =>
+      res.url().endsWith("/api/board") &&
+      res.request().method() === "PUT" &&
+      res.ok()
+  );
+
+  await firstColumn.getByRole("button", { name: /add a card/i }).click();
+  await firstColumn.getByPlaceholder("Card title").fill("Persisted card");
+  await firstColumn.getByRole("button", { name: /add card/i }).click();
+  await expect(firstColumn.getByText("Persisted card")).toBeVisible();
+
+  await saved;
+  await page.reload();
+  await expect(page.getByText("Persisted card")).toBeVisible();
 });

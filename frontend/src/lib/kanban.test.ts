@@ -22,4 +22,15 @@ describe("moveCard", () => {
     expect(result[0].cardIds).toEqual(["card-2"]);
     expect(result[1].cardIds).toEqual(["card-3", "card-1"]);
   });
+
+  it("inserts a card at the target card's position in another column", () => {
+    const result = moveCard(baseColumns, "card-1", "card-3");
+    expect(result[0].cardIds).toEqual(["card-2"]);
+    expect(result[1].cardIds).toEqual(["card-1", "card-3"]);
+  });
+
+  it("returns columns unchanged for unknown ids", () => {
+    expect(moveCard(baseColumns, "missing", "card-1")).toEqual(baseColumns);
+    expect(moveCard(baseColumns, "card-1", "missing")).toEqual(baseColumns);
+  });
 });
