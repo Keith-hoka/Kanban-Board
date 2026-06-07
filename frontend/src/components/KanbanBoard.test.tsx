@@ -10,6 +10,24 @@ describe("KanbanBoard", () => {
     expect(screen.getAllByTestId(/column-/i)).toHaveLength(5);
   });
 
+  it("adds a column", async () => {
+    render(<KanbanBoard />);
+    expect(screen.getAllByTestId(/column-/i)).toHaveLength(5);
+    await userEvent.click(screen.getByRole("button", { name: /add column/i }));
+    expect(screen.getAllByTestId(/column-/i)).toHaveLength(6);
+    expect(screen.getByDisplayValue("New Column")).toBeInTheDocument();
+  });
+
+  it("deletes a column", async () => {
+    render(<KanbanBoard />);
+    expect(screen.getAllByTestId(/column-/i)).toHaveLength(5);
+    const column = getFirstColumn();
+    await userEvent.click(
+      within(column).getByRole("button", { name: /delete .* column/i })
+    );
+    expect(screen.getAllByTestId(/column-/i)).toHaveLength(4);
+  });
+
   it("renames a column", async () => {
     render(<KanbanBoard />);
     const column = getFirstColumn();

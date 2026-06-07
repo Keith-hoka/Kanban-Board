@@ -117,6 +117,30 @@ export const KanbanBoard = ({
     }));
   };
 
+  const handleAddColumn = () => {
+    const id = createId("col");
+    setBoard((prev) => ({
+      ...prev,
+      columns: [...prev.columns, { id, title: "New Column", cardIds: [] }],
+    }));
+  };
+
+  const handleDeleteColumn = (columnId: string) => {
+    setBoard((prev) => {
+      const column = prev.columns.find((item) => item.id === columnId);
+      if (!column) {
+        return prev;
+      }
+      const removedCardIds = new Set(column.cardIds);
+      return {
+        columns: prev.columns.filter((item) => item.id !== columnId),
+        cards: Object.fromEntries(
+          Object.entries(prev.cards).filter(([id]) => !removedCardIds.has(id))
+        ),
+      };
+    });
+  };
+
   const handleDeleteCard = (columnId: string, cardId: string) => {
     setBoard((prev) => {
       return {
@@ -188,6 +212,17 @@ export const KanbanBoard = ({
                 {column.title}
               </div>
             ))}
+            <button
+              type="button"
+              onClick={handleAddColumn}
+              aria-label="Add column"
+              className="flex items-center gap-2 rounded-full border border-dashed border-[var(--stroke)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)] transition hover:border-[var(--primary-blue)] hover:text-[var(--primary-blue)]"
+            >
+              <span aria-hidden="true" className="text-base leading-none">
+                +
+              </span>
+              Add column
+            </button>
           </div>
         </header>
 
@@ -197,8 +232,8 @@ export const KanbanBoard = ({
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-            <section className="grid min-w-0 flex-1 gap-6 lg:grid-cols-5">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-stretch">
+            <section className="grid min-w-0 flex-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
               {board.columns.map((column) => (
                 <KanbanColumn
                   key={column.id}
@@ -207,6 +242,7 @@ export const KanbanBoard = ({
                   onRename={handleRenameColumn}
                   onAddCard={handleAddCard}
                   onDeleteCard={handleDeleteCard}
+                  onDeleteColumn={handleDeleteColumn}
                 />
               ))}
             </section>

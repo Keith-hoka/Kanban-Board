@@ -53,7 +53,7 @@ export const ChatSidebar = ({ onBoardUpdate }: ChatSidebarProps) => {
   return (
     <aside
       data-testid="chat-sidebar"
-      className="flex h-[70vh] w-full flex-col overflow-hidden rounded-3xl border border-[var(--stroke)] bg-white/80 shadow-[var(--shadow)] backdrop-blur lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)] lg:w-[360px] lg:shrink-0"
+      className="flex h-[70vh] w-full flex-col overflow-hidden rounded-3xl border border-[var(--stroke)] bg-white/80 shadow-[var(--shadow)] backdrop-blur lg:h-[520px] lg:w-[360px] lg:shrink-0"
     >
       <div className="border-b border-[var(--stroke)] px-5 py-4">
         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--gray-text)]">
@@ -64,7 +64,7 @@ export const ChatSidebar = ({ onBoardUpdate }: ChatSidebarProps) => {
         </p>
       </div>
 
-      <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
+      <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
         {messages.length === 0 && (
           <p className="text-sm leading-6 text-[var(--gray-text)]">
             Try: &ldquo;Add a card &lsquo;Draft launch plan&rsquo; to Backlog&rdquo; or

@@ -11,6 +11,7 @@ type KanbanColumnProps = {
   onRename: (columnId: string, title: string) => void;
   onAddCard: (columnId: string, title: string, details: string) => void;
   onDeleteCard: (columnId: string, cardId: string) => void;
+  onDeleteColumn: (columnId: string) => void;
 };
 
 export const KanbanColumn = ({
@@ -19,6 +20,7 @@ export const KanbanColumn = ({
   onRename,
   onAddCard,
   onDeleteCard,
+  onDeleteColumn,
 }: KanbanColumnProps) => {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
@@ -42,6 +44,14 @@ export const KanbanColumn = ({
         <span className="shrink-0 rounded-full bg-[var(--surface)] px-2.5 py-1 text-xs font-semibold tabular-nums text-[var(--gray-text)]">
           {cards.length}
         </span>
+        <button
+          type="button"
+          onClick={() => onDeleteColumn(column.id)}
+          aria-label={`Delete ${column.title} column`}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xl leading-none text-[var(--gray-text)] transition hover:bg-[var(--surface)] hover:text-[var(--secondary-purple)]"
+        >
+          <span aria-hidden="true">&times;</span>
+        </button>
       </div>
       <div className="mt-4 flex flex-1 flex-col gap-3">
         <SortableContext items={column.cardIds} strategy={verticalListSortingStrategy}>

@@ -43,6 +43,43 @@ test("moves a card between columns", async ({ page }) => {
   await expect(targetColumn.getByTestId("card-card-1")).toBeVisible();
 });
 
+test("creates a column that persists across reload", async ({ page }) => {
+  await expect(page.locator('[data-testid^="column-"]')).toHaveCount(5);
+
+  const saved = page.waitForResponse(
+    (res) =>
+      res.url().endsWith("/api/board") &&
+      res.request().method() === "PUT" &&
+      res.ok()
+  );
+
+  await page.getByRole("button", { name: /add column/i }).click();
+  await expect(page.locator('[data-testid^="column-"]')).toHaveCount(6);
+
+  await saved;
+  await page.reload();
+  await expect(page.locator('[data-testid^="column-"]')).toHaveCount(6);
+});
+
+test("deletes a column that persists across reload", async ({ page }) => {
+  await expect(page.locator('[data-testid^="column-"]')).toHaveCount(5);
+
+  const saved = page.waitForResponse(
+    (res) =>
+      res.url().endsWith("/api/board") &&
+      res.request().method() === "PUT" &&
+      res.ok()
+  );
+
+  const firstColumn = page.locator('[data-testid^="column-"]').first();
+  await firstColumn.getByRole("button", { name: /delete .* column/i }).click();
+  await expect(page.locator('[data-testid^="column-"]')).toHaveCount(4);
+
+  await saved;
+  await page.reload();
+  await expect(page.locator('[data-testid^="column-"]')).toHaveCount(4);
+});
+
 test("persists a new card across reload", async ({ page }) => {
   const firstColumn = page.locator('[data-testid^="column-"]').first();
 
