@@ -25,6 +25,8 @@ export const BoardContainer = ({ onLogout }: BoardContainerProps) => {
   const [status, setStatus] = useState<Status>("loading");
   const [saveFailed, setSaveFailed] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Set when an AI update is applied, so the resulting onChange is not re-saved.
+  const skipNextSave = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -46,6 +48,11 @@ export const BoardContainer = ({ onLogout }: BoardContainerProps) => {
   }, []);
 
   const handleChange = useCallback((next: BoardData) => {
+    if (skipNextSave.current) {
+      // This change is an AI board the server already persisted; do not re-save.
+      skipNextSave.current = false;
+      return;
+    }
     if (timer.current) {
       clearTimeout(timer.current);
     }
@@ -57,8 +64,10 @@ export const BoardContainer = ({ onLogout }: BoardContainerProps) => {
   }, []);
 
   // The AI already persisted the board server-side; pushing it into state lets
-  // KanbanBoard pick it up (via its initialBoard sync) without a remount.
+  // KanbanBoard pick it up (via its initialBoard sync) without a remount. Flag
+  // the resulting onChange so it is not saved again.
   const handleBoardFromChat = useCallback((next: BoardData) => {
+    skipNextSave.current = true;
     setBoard(next);
   }, []);
 

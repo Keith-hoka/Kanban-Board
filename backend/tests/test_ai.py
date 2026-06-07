@@ -24,6 +24,12 @@ def test_message_text_rejects_bad_shape():
         ai.message_text({"choices": []})
 
 
+def test_message_text_rejects_null_content():
+    # A refusal can return content: null; it must surface as AIError, not crash.
+    with pytest.raises(ai.AIError):
+        ai.message_text({"choices": [{"message": {"content": None}}]})
+
+
 def test_ping_requires_auth(client):
     assert client.post("/api/ai/ping").status_code == 401
 

@@ -52,6 +52,36 @@ def test_malformed_put_rejected(client):
     assert client.put("/api/board", json=bad_card).status_code == 422
 
 
+def test_put_rejects_missing_card_reference(client):
+    _login(client)
+    bad = {
+        "columns": [{"id": "c1", "title": "Todo", "cardIds": ["missing"]}],
+        "cards": {},
+    }
+    assert client.put("/api/board", json=bad).status_code == 422
+
+
+def test_put_rejects_card_key_id_mismatch(client):
+    _login(client)
+    bad = {
+        "columns": [{"id": "c1", "title": "Todo", "cardIds": ["a"]}],
+        "cards": {"a": {"id": "b", "title": "T", "details": "D"}},
+    }
+    assert client.put("/api/board", json=bad).status_code == 422
+
+
+def test_put_rejects_duplicate_card_placement(client):
+    _login(client)
+    bad = {
+        "columns": [
+            {"id": "c1", "title": "Todo", "cardIds": ["x"]},
+            {"id": "c2", "title": "Done", "cardIds": ["x"]},
+        ],
+        "cards": {"x": {"id": "x", "title": "T", "details": "D"}},
+    }
+    assert client.put("/api/board", json=bad).status_code == 422
+
+
 def test_persists_across_restart():
     # The autouse temp_db fixture fixes DATABASE_PATH for this test; two separate
     # TestClient lifespans simulate a restart against the same database file.

@@ -30,11 +30,32 @@ class AIError(Exception):
     """Raised for missing credentials or a failed/unparseable OpenRouter call."""
 
 
+# A long-lived client registered by the app lifespan so requests reuse one
+# connection pool. Direct callers (e.g. tests with no app running) fall back to
+# a one-off client, which avoids reusing a client across event loops.
+_shared_client: httpx.AsyncClient | None = None
+
+
+def set_client(client: httpx.AsyncClient | None) -> None:
+    global _shared_client
+    _shared_client = client
+
+
 def _api_key() -> str:
     key = os.environ.get("OPENROUTER_API_KEY")
     if not key:
         raise AIError("OPENROUTER_API_KEY is not set")
     return key
+
+
+async def _post(client: httpx.AsyncClient, payload: dict, headers: dict,
+                timeout: float) -> dict:
+    response = await client.post(
+        OPENROUTER_URL, headers=headers, json=payload, timeout=timeout
+    )
+    if response.status_code != 200:
+        raise AIError(f"OpenRouter returned {response.status_code}: {response.text[:300]}")
+    return response.json()
 
 
 async def chat(messages: list[dict], response_format: dict | None = None,
@@ -49,20 +70,23 @@ async def chat(messages: list[dict], response_format: dict | None = None,
         payload["response_format"] = response_format
 
     headers = {"Authorization": f"Bearer {_api_key()}"}
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        response = await client.post(OPENROUTER_URL, headers=headers, json=payload)
-
-    if response.status_code != 200:
-        raise AIError(f"OpenRouter returned {response.status_code}: {response.text[:300]}")
-    return response.json()
+    if _shared_client is not None:
+        return await _post(_shared_client, payload, headers, timeout)
+    async with httpx.AsyncClient() as client:
+        return await _post(client, payload, headers, timeout)
 
 
 def message_text(data: dict) -> str:
     """Extract the assistant message content from an OpenRouter response."""
     try:
-        return data["choices"][0]["message"]["content"]
+        content = data["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:
         raise AIError("Unexpected AI response shape") from exc
+    # content can be null (e.g. a refusal); treat it as an error so callers
+    # take the retry / clean-error path instead of crashing on None.
+    if not isinstance(content, str):
+        raise AIError("AI returned empty content")
+    return content
 
 
 router = APIRouter(prefix="/api/ai")

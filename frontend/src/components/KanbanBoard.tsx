@@ -7,13 +7,23 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-  closestCorners,
+  pointerWithin,
+  rectIntersection,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { createId, initialData, moveCard, type BoardData } from "@/lib/kanban";
+
+// Drop onto whatever the pointer is over, so a card lands in the column the
+// cursor is in (more forgiving than corner-distance for narrow columns). Fall
+// back to rectangle overlap when the pointer sits in a gap between droppables.
+const collisionDetection: CollisionDetection = (args) => {
+  const pointerCollisions = pointerWithin(args);
+  return pointerCollisions.length > 0 ? pointerCollisions : rectIntersection(args);
+};
 
 type KanbanBoardProps = {
   initialBoard?: BoardData;
@@ -30,6 +40,7 @@ export const KanbanBoard = ({
 }: KanbanBoardProps) => {
   const [board, setBoard] = useState<BoardData>(() => initialBoard);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const [activeWidth, setActiveWidth] = useState<number | null>(null);
 
   // Notify the parent of every board change (skipping the initial render) so it
   // can persist. Kept in a ref so an inline onChange does not retrigger saves.
@@ -46,8 +57,9 @@ export const KanbanBoard = ({
     onChangeRef.current?.(board);
   }, [board]);
 
-  // Apply an externally-replaced board (e.g. an AI edit) without remounting,
-  // so the chat sidebar's state survives a board refresh.
+  // Apply an externally-replaced board (e.g. an AI edit) without remounting, so
+  // the chat sidebar's state survives a board refresh. The parent suppresses the
+  // resulting save (the server already has this board).
   useEffect(() => {
     setBoard(initialBoard);
   }, [initialBoard]);
@@ -62,11 +74,13 @@ export const KanbanBoard = ({
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveCardId(event.active.id as string);
+    setActiveWidth(event.active.rect.current.initial?.width ?? null);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveCardId(null);
+    setActiveWidth(null);
 
     if (!over || active.id === over.id) {
       return;
@@ -179,7 +193,7 @@ export const KanbanBoard = ({
 
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={collisionDetection}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
@@ -200,7 +214,7 @@ export const KanbanBoard = ({
           </div>
           <DragOverlay>
             {activeCard ? (
-              <div className="w-[260px]">
+              <div style={{ width: activeWidth ?? undefined }}>
                 <KanbanCardPreview card={activeCard} />
               </div>
             ) : null}

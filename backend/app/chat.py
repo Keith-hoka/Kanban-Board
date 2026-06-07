@@ -1,12 +1,14 @@
 import json
 import re
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from app import ai, db
 from app.auth import require_user
-from app.board import BoardData
+from app.board import BoardData, validate_board_integrity
 
 router = APIRouter(prefix="/api")
 
@@ -26,8 +28,9 @@ SYSTEM_PROMPT = (
     "a column must match exactly one card in that array."
 )
 
-# Card map (Record<id, Card>) cannot be expressed under strict json_schema, so the
-# model emits cards as an array; the server converts it back to the stored map shape.
+# Same board shape as board.py / frontend kanban.ts, but with cards as an ARRAY:
+# a Record<id, Card> map cannot be expressed under strict json_schema. The server
+# converts the array back to the stored map shape in _ai_to_board. Keep in sync.
 _CARD_SCHEMA = {
     "type": "object",
     "properties": {
@@ -76,7 +79,8 @@ RESPONSE_FORMAT = {
 
 
 class ChatMessage(BaseModel):
-    role: str
+    # Constrain roles so a client cannot inject system-level instructions.
+    role: Literal["user", "assistant"]
     content: str
 
 
@@ -100,14 +104,10 @@ def _ai_to_board(update: dict) -> dict:
     if len(cards) != len(cards_list):
         raise ValueError("duplicate card ids")
 
-    referenced = [cid for column in update["columns"] for cid in column["cardIds"]]
-    if len(referenced) != len(set(referenced)):
-        raise ValueError("a card is placed in more than one position")
-    if any(cid not in cards for cid in referenced):
-        raise ValueError("a column references a missing card")
-
-    # Pydantic validates field types/shape; returns the stored (cards map) shape.
-    return BoardData(columns=update["columns"], cards=cards).model_dump()
+    # Pydantic validates field types/shape; the shared check covers integrity.
+    board = BoardData(columns=update["columns"], cards=cards)
+    validate_board_integrity(board)
+    return board.model_dump()
 
 
 def _extract_json(content: str) -> dict:
@@ -140,7 +140,9 @@ async def _ask_model(messages: list[dict]) -> dict:
 
 @router.post("/chat")
 async def chat(body: ChatRequest, username: str = Depends(require_user)):
-    board = db.get_board(username)
+    # Keep the blocking SQLite calls off the event loop (this handler is async
+    # because it awaits the AI call).
+    board = await run_in_threadpool(db.get_board, username)
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "system", "content": "Current board JSON:\n" + json.dumps(_board_to_ai(board))},
@@ -154,7 +156,7 @@ async def chat(body: ChatRequest, username: str = Depends(require_user)):
     if parsed["board_update"] is not None:
         try:
             board = _ai_to_board(parsed["board_update"])
-            db.save_board(username, board)
+            await run_in_threadpool(db.save_board, username, board)
             board_updated = True
         except (ValueError, KeyError, TypeError):
             # Invalid update: ignore it and keep the existing board intact.

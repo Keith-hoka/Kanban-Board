@@ -1,3 +1,6 @@
+// Canonical board shape. Mirrored on the backend by the Pydantic `BoardData`
+// in backend/app/board.py (and the AI's array-of-cards variant in
+// backend/app/chat.py). Keep these in sync when changing the shape.
 export type Card = {
   id: string;
   title: string;

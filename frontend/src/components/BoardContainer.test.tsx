@@ -42,6 +42,30 @@ describe("BoardContainer", () => {
     ).toBe(true);
   });
 
+  it("does not re-save the board after an AI update", async () => {
+    vi.spyOn(api, "getBoard").mockResolvedValue(sampleBoard);
+    const save = vi.spyOn(api, "saveBoard").mockResolvedValue();
+    vi.spyOn(api, "sendChat").mockResolvedValue({
+      reply: "Added it.",
+      board: {
+        columns: [{ id: "c1", title: "Todo", cardIds: ["n"] }],
+        cards: { n: { id: "n", title: "AI card", details: "" } },
+      },
+      boardUpdated: true,
+    });
+    render(<BoardContainer onLogout={() => {}} />);
+    await screen.findByRole("heading", { name: "Kanban Studio" });
+
+    await userEvent.type(screen.getByLabelText("Chat message"), "add a card");
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    // The AI's board appears...
+    expect(await screen.findByText("AI card")).toBeInTheDocument();
+    // ...but it was already persisted server-side, so we must not re-save it.
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it("shows an error when the board fails to load", async () => {
     vi.spyOn(api, "getBoard").mockRejectedValue(new Error("boom"));
     render(<BoardContainer onLogout={() => {}} />);

@@ -1,4 +1,6 @@
+import logging
 import os
+import secrets
 from contextlib import asynccontextmanager
 
 import httpx
@@ -10,8 +12,19 @@ from app import ai, auth, board, chat, db
 # Internal address of the Next.js server that FastAPI proxies to.
 NEXT_INTERNAL_URL = os.environ.get("NEXT_INTERNAL_URL", "http://127.0.0.1:3000")
 
-# Secret for signing the session cookie. Override in production via env.
-SESSION_SECRET = os.environ.get("SESSION_SECRET", "dev-insecure-secret-change-me")
+# Secret for signing the session cookie. Never ship a hardcoded default: if the
+# env var is unset, use a random per-process secret. Logins then do not survive a
+# restart, which is fine for the MVP; set SESSION_SECRET in .env to persist them.
+SESSION_SECRET = os.environ.get("SESSION_SECRET")
+if not SESSION_SECRET:
+    SESSION_SECRET = secrets.token_hex(32)
+    logging.getLogger("uvicorn.error").warning(
+        "SESSION_SECRET not set; using a random secret. Sessions will reset on "
+        "restart. Set SESSION_SECRET in .env to persist logins."
+    )
+
+# Mark the session cookie Secure when served over HTTPS. Default off for local HTTP.
+COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "false").lower() in ("1", "true", "yes")
 
 # Hop-by-hop headers that must not be forwarded when proxying.
 _EXCLUDED_RESPONSE_HEADERS = {
@@ -26,7 +39,11 @@ _EXCLUDED_RESPONSE_HEADERS = {
 async def lifespan(app: FastAPI):
     db.init_db()
     app.state.next_client = httpx.AsyncClient(base_url=NEXT_INTERNAL_URL, timeout=30.0)
+    ai_client = httpx.AsyncClient(timeout=60.0)
+    ai.set_client(ai_client)
     yield
+    ai.set_client(None)
+    await ai_client.aclose()
     await app.state.next_client.aclose()
 
 
@@ -35,7 +52,7 @@ app.add_middleware(
     SessionMiddleware,
     secret_key=SESSION_SECRET,
     same_site="lax",
-    https_only=False,
+    https_only=COOKIE_SECURE,
 )
 
 

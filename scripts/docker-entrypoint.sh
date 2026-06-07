@@ -4,7 +4,7 @@
 set -euo pipefail
 
 cd /app/frontend
-npm run start -- --hostname 127.0.0.1 --port 3000 &
+HOSTNAME=127.0.0.1 PORT=3000 node server.js &
 next_pid=$!
 
 cd /app/backend
