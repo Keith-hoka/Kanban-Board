@@ -3,14 +3,18 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import clsx from "clsx";
 import { sendChat, type ChatTurn } from "@/lib/api";
-import type { BoardData } from "@/lib/kanban";
+import { createId, type BoardData } from "@/lib/kanban";
 
 type ChatSidebarProps = {
   onBoardUpdate: (board: BoardData) => void;
+  // Flush any unsaved board edits before sending, so the AI reads the latest.
+  onBeforeSend?: () => Promise<void>;
 };
 
-export const ChatSidebar = ({ onBoardUpdate }: ChatSidebarProps) => {
-  const [messages, setMessages] = useState<ChatTurn[]>([]);
+type Message = ChatTurn & { id: string };
+
+export const ChatSidebar = ({ onBoardUpdate, onBeforeSend }: ChatSidebarProps) => {
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,15 +35,25 @@ export const ChatSidebar = ({ onBoardUpdate }: ChatSidebarProps) => {
       return;
     }
 
-    const history = messages;
-    setMessages((prev) => [...prev, { role: "user", content: text }]);
+    const history: ChatTurn[] = messages.map(({ role, content }) => ({
+      role,
+      content,
+    }));
+    setMessages((prev) => [
+      ...prev,
+      { id: createId("msg"), role: "user", content: text },
+    ]);
     setInput("");
     setError(null);
     setPending(true);
 
     try {
+      await onBeforeSend?.();
       const res = await sendChat(text, history);
-      setMessages((prev) => [...prev, { role: "assistant", content: res.reply }]);
+      setMessages((prev) => [
+        ...prev,
+        { id: createId("msg"), role: "assistant", content: res.reply },
+      ]);
       if (res.boardUpdated) {
         onBoardUpdate(res.board);
       }
@@ -71,9 +85,9 @@ export const ChatSidebar = ({ onBoardUpdate }: ChatSidebarProps) => {
             &ldquo;Move QA micro-interactions to Done&rdquo;.
           </p>
         )}
-        {messages.map((message, index) => (
+        {messages.map((message) => (
           <div
-            key={index}
+            key={message.id}
             data-testid={`chat-${message.role}`}
             className={clsx(
               "max-w-[90%] rounded-2xl px-4 py-2 text-sm leading-6",

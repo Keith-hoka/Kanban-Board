@@ -164,6 +164,20 @@ export const moveCard = (
   });
 };
 
+// Guard against malformed boards from the backend or AI: drop any card id a
+// column references but that has no matching card, so rendering never derefs an
+// undefined card. Tolerates a missing columns array or cards record.
+export const normalizeBoard = (board: BoardData): BoardData => {
+  const cards = board.cards ?? {};
+  return {
+    cards,
+    columns: (board.columns ?? []).map((column) => ({
+      ...column,
+      cardIds: (column.cardIds ?? []).filter((cardId) => cards[cardId]),
+    })),
+  };
+};
+
 export const createId = (prefix: string) => {
   const randomPart = Math.random().toString(36).slice(2, 8);
   const timePart = Date.now().toString(36);

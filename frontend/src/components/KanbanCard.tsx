@@ -2,6 +2,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
 import type { Card } from "@/lib/kanban";
+import { CardContent } from "@/components/CardContent";
 
 type KanbanCardProps = {
   card: Card;
@@ -40,14 +41,7 @@ export const KanbanCard = ({ card, onDelete }: KanbanCardProps) => {
         <span aria-hidden="true">&times;</span>
       </button>
 
-      <h4 className="pr-7 font-display text-sm font-semibold leading-snug text-[var(--navy-dark)]">
-        {card.title}
-      </h4>
-      {card.details && (
-        <p className="mt-2 text-sm leading-6 text-[var(--gray-text)]">
-          {card.details}
-        </p>
-      )}
+      <CardContent card={card} titlePadding />
     </article>
   );
 };

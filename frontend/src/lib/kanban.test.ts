@@ -1,4 +1,4 @@
-import { moveCard, type Column } from "@/lib/kanban";
+import { moveCard, normalizeBoard, type Column } from "@/lib/kanban";
 
 describe("moveCard", () => {
   const baseColumns: Column[] = [
@@ -32,5 +32,23 @@ describe("moveCard", () => {
   it("returns columns unchanged for unknown ids", () => {
     expect(moveCard(baseColumns, "missing", "card-1")).toEqual(baseColumns);
     expect(moveCard(baseColumns, "card-1", "missing")).toEqual(baseColumns);
+  });
+});
+
+describe("normalizeBoard", () => {
+  it("drops card ids with no matching card", () => {
+    const result = normalizeBoard({
+      columns: [{ id: "col-a", title: "A", cardIds: ["card-1", "ghost"] }],
+      cards: { "card-1": { id: "card-1", title: "Real", details: "" } },
+    });
+    expect(result.columns[0].cardIds).toEqual(["card-1"]);
+  });
+
+  it("keeps a valid board intact", () => {
+    const board = {
+      columns: [{ id: "col-a", title: "A", cardIds: ["card-1"] }],
+      cards: { "card-1": { id: "card-1", title: "Real", details: "" } },
+    };
+    expect(normalizeBoard(board)).toEqual(board);
   });
 });

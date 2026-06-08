@@ -25,6 +25,8 @@ export const BoardContainer = ({ onLogout }: BoardContainerProps) => {
   const [status, setStatus] = useState<Status>("loading");
   const [saveFailed, setSaveFailed] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The latest edited board awaiting its debounced save.
+  const pending = useRef<BoardData | null>(null);
   // Set when an AI update is applied, so the resulting onChange is not re-saved.
   const skipNextSave = useRef(false);
 
@@ -47,21 +49,42 @@ export const BoardContainer = ({ onLogout }: BoardContainerProps) => {
     };
   }, []);
 
-  const handleChange = useCallback((next: BoardData) => {
-    if (skipNextSave.current) {
-      // This change is an AI board the server already persisted; do not re-save.
-      skipNextSave.current = false;
-      return;
-    }
+  // Save the pending board now, cancelling any scheduled save. Used both by the
+  // debounce timer and to flush before a chat request, so the AI reads the
+  // user's latest board rather than overwriting unsaved edits.
+  const flush = useCallback(async () => {
     if (timer.current) {
       clearTimeout(timer.current);
+      timer.current = null;
     }
-    timer.current = setTimeout(() => {
-      saveBoard(next)
-        .then(() => setSaveFailed(false))
-        .catch(() => setSaveFailed(true));
-    }, 500);
+    const next = pending.current;
+    if (!next) {
+      return;
+    }
+    pending.current = null;
+    try {
+      await saveBoard(next);
+      setSaveFailed(false);
+    } catch {
+      setSaveFailed(true);
+    }
   }, []);
+
+  const handleChange = useCallback(
+    (next: BoardData) => {
+      if (skipNextSave.current) {
+        // This change is an AI board the server already persisted; do not re-save.
+        skipNextSave.current = false;
+        return;
+      }
+      pending.current = next;
+      if (timer.current) {
+        clearTimeout(timer.current);
+      }
+      timer.current = setTimeout(flush, 500);
+    },
+    [flush]
+  );
 
   // The AI already persisted the board server-side; pushing it into state lets
   // KanbanBoard pick it up (via its initialBoard sync) without a remount. Flag
@@ -93,7 +116,9 @@ export const BoardContainer = ({ onLogout }: BoardContainerProps) => {
         initialBoard={board}
         onChange={handleChange}
         onLogout={onLogout}
-        sidebar={<ChatSidebar onBoardUpdate={handleBoardFromChat} />}
+        sidebar={
+          <ChatSidebar onBoardUpdate={handleBoardFromChat} onBeforeSend={flush} />
+        }
       />
     </>
   );

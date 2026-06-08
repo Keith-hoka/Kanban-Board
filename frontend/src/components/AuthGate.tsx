@@ -17,8 +17,13 @@ export const AuthGate = () => {
   }, []);
 
   const handleLogout = async () => {
-    await logout();
-    setStatus("anon");
+    try {
+      await logout();
+      setStatus("anon");
+    } catch {
+      // Logout failed server-side; keep the user signed in rather than showing
+      // a logged-out UI over a still-live session.
+    }
   };
 
   if (status === "loading") {

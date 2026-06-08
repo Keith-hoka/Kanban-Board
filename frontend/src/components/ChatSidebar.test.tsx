@@ -61,6 +61,24 @@ describe("ChatSidebar", () => {
     expect(onBoardUpdate).not.toHaveBeenCalled();
   });
 
+  it("flushes pending edits via onBeforeSend before sending", async () => {
+    const order: string[] = [];
+    const onBeforeSend = vi.fn(async () => {
+      order.push("flush");
+    });
+    vi.spyOn(api, "sendChat").mockImplementation(async () => {
+      order.push("send");
+      return { reply: "ok", board, boardUpdated: false };
+    });
+    render(<ChatSidebar onBoardUpdate={() => {}} onBeforeSend={onBeforeSend} />);
+
+    await userEvent.type(screen.getByLabelText("Chat message"), "hi");
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await screen.findByText("ok");
+    expect(order).toEqual(["flush", "send"]);
+  });
+
   it("shows an error when the request fails", async () => {
     vi.spyOn(api, "sendChat").mockRejectedValue(new Error("boom"));
     render(<ChatSidebar onBoardUpdate={() => {}} />);

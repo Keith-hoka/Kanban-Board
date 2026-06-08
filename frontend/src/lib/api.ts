@@ -1,7 +1,7 @@
 // Client for the FastAPI backend. Same-origin in the container; `credentials`
 // ensures the session cookie is sent.
 
-import type { BoardData } from "@/lib/kanban";
+import { normalizeBoard, type BoardData } from "@/lib/kanban";
 
 export type User = { user: string };
 
@@ -33,7 +33,10 @@ export async function login(username: string, password: string): Promise<User> {
 }
 
 export async function logout(): Promise<void> {
-  await fetch("/api/logout", { method: "POST", credentials: "include" });
+  const res = await fetch("/api/logout", { method: "POST", credentials: "include" });
+  if (!res.ok) {
+    throw new Error("Logout failed");
+  }
 }
 
 export async function getBoard(): Promise<BoardData> {
@@ -41,7 +44,7 @@ export async function getBoard(): Promise<BoardData> {
   if (!res.ok) {
     throw new Error("Failed to load board");
   }
-  return res.json();
+  return normalizeBoard(await res.json());
 }
 
 export async function saveBoard(board: BoardData): Promise<void> {
@@ -77,5 +80,6 @@ export async function sendChat(
   if (!res.ok) {
     throw new Error("Chat request failed");
   }
-  return res.json();
+  const data: ChatResponse = await res.json();
+  return { ...data, board: normalizeBoard(data.board) };
 }
