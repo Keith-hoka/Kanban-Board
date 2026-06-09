@@ -4,25 +4,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-A Project Management MVP web app being built in 10 parts per `docs/PLAN.md`. Read that plan before starting work — each part has substeps to check off and success criteria.
+A completed Project Management MVP: a single-board Kanban web app with hardcoded sign-in and an AI chat sidebar that can edit the board, running locally in one Docker container. All 10 parts of `docs/PLAN.md` are done. The frontend is fully wired to a FastAPI backend over `/api/*` — the original in-memory demo state has been replaced by real API calls. Read `docs/PLAN.md` and the per-area `AGENTS.md` files (root, `frontend/`, `backend/`, `scripts/`) before changing things.
 
-Currently the `frontend/` holds a working, frontend-only Kanban demo with no backend wiring; `docs/PLAN.md` is now a detailed checklist-driven plan (Part 1 done, awaiting/after user approval). The `backend/`, `scripts/`, and Docker pieces are planned but not yet built. When implementing later parts, the demo's in-memory state must be replaced with backend API calls. `frontend/AGENTS.md` describes the existing frontend in detail.
+## Architecture
 
-## Target architecture (planned)
-
-- **Serving**: the **Next.js server runs behind FastAPI** in one container. FastAPI owns `/api/*` and proxies all other paths to the Next server (two processes, one container). This was chosen over a static export.
-- **Backend**: Python FastAPI, `uv` package manager, `pytest` for tests.
-- **Packaging**: single Docker container, run locally. Start/stop scripts for Mac/PC/Linux go in `scripts/`.
-- **Database**: local SQLite, created on first run if absent. Schema stores the Kanban as JSON. Sign-in is hardcoded (`user`/`password`) but the DB is modeled for multiple users; one board per user for the MVP.
-- **AI**: OpenRouter, model `openai/gpt-oss-120b`, key from `OPENROUTER_API_KEY` in root `.env`. The AI chat sidebar sends the board JSON + conversation and returns Structured Outputs with a user reply and an optional board update that auto-refreshes the UI.
+- **Serving**: the **Next.js server runs behind FastAPI** in one container. FastAPI owns `/api/*`; the `proxy_to_next` catch-all in `backend/app/main.py` forwards every other path to the Next server (default `http://127.0.0.1:3000`) and must stay registered last. Two processes, one container.
+- **Backend**: Python FastAPI, `uv` package manager, `pytest`. Module-by-module layout is documented in `backend/AGENTS.md`: `auth.py` (cookie-session login, hardcoded `user`/`password`, `require_user` dep), `board.py` (`GET`/`PUT /api/board`, Pydantic validation), `db.py` (stdlib `sqlite3`), `ai.py` + `chat.py` (OpenRouter).
+- **Packaging**: single Docker container, run locally. `scripts/start.*` and `scripts/stop.*` cover Mac/Linux (`.sh`) and Windows (`.ps1`); `scripts/docker-entrypoint.sh` runs Next in the background and uvicorn in the foreground.
+- **Database**: SQLite, created and seeded on first run if absent. One JSON-blob row per user holds the whole board (not normalized); the DB is modeled for multiple users though the MVP has one. Path from `DATABASE_PATH` (default `backend/data/kanban.db`). See `docs/DATABASE.md`.
+- **AI**: OpenRouter, model `openai/gpt-oss-120b`, key from `OPENROUTER_API_KEY` in root `.env`. `POST /api/chat` sends the board + history + message and requests a structured `{reply, board_update}`. The model does not strictly honor `json_schema`, so the backend uses a firm prompt + tolerant JSON extraction + retry, and validates any `board_update` (shape + referential integrity), ignoring invalid ones so the board is never corrupted. See `docs/AI.md`.
 
 ## Frontend architecture
 
 The board is a pure-function state model, deliberately kept simple:
 
-- `src/lib/kanban.ts` — the data model (`BoardData` = `columns: Column[]` + `cards: Record<id, Card>`) plus pure helpers `moveCard`, `createId`, and `initialData` seed. All drag/reorder logic lives in `moveCard` (handles same-column reorder, cross-column move, and drops onto an empty column). This file is framework-agnostic and is the most heavily unit-tested.
-- `src/components/KanbanBoard.tsx` — the single source of truth. Owns all board state via `useState(initialData)` and holds every mutation handler (add/delete/move card, rename column). Wraps the columns in dnd-kit's `DndContext`. This is where backend persistence will hook in.
-- `KanbanColumn` / `KanbanCard` / `KanbanCardPreview` / `NewCardForm` — presentational; they receive data and callbacks as props and own no board state.
+- `src/lib/kanban.ts` — the data model (`BoardData` = `columns: Column[]` + `cards: Record<id, Card>`) plus pure helpers `moveCard`, `normalizeBoard`, `createId`, and the `initialData` seed. All drag/reorder logic lives in `moveCard` (same-column reorder, cross-column move, drop onto an empty column). The shape mirrors the backend `BoardData` in `backend/app/board.py` (and the AI variant in `chat.py`) — keep them in sync. Framework-agnostic and the most heavily unit-tested file.
+- `src/lib/api.ts` — fetch client for `/api/*` (`getMe`/`login`/`logout`, `getBoard`/`saveBoard`, `sendChat`); runs boards from the server and the AI through `normalizeBoard` before use.
+- `src/components/AuthGate.tsx` — top-level gate: checks `/api/me`, then renders `LoginForm` or `BoardContainer`.
+- `src/components/BoardContainer.tsx` — loads the board and owns persistence: a debounced full-board `PUT` (500ms after the last edit), a flush before each chat send, and applying AI board updates without re-saving (the server already persisted them).
+- `src/components/KanbanBoard.tsx` — the board UI plus every mutation handler (add/delete/move card, rename column, add/delete column) and dnd-kit's `DndContext`. Receives `initialBoard`/`onChange` from `BoardContainer`; it syncs an externally-replaced board (e.g. an AI edit) via an effect rather than remounting, so the chat sidebar's state survives a refresh.
+- `KanbanColumn` / `KanbanCard` / `KanbanCardPreview` / `CardContent` / `NewCardForm` / `ChatSidebar` — presentational; they receive data and callbacks as props and own no board state.
 
 Path alias `@/` maps to `frontend/src/`.
 
@@ -44,6 +45,21 @@ npm run test:all                        # unit then e2e
 ```
 
 Vitest covers `src/**/*.{test,spec}.{ts,tsx}` (jsdom); Playwright specs live in `frontend/tests/` and are excluded from vitest.
+
+Run from `backend/`:
+
+```bash
+uv sync                                            # install deps (.venv + uv.lock)
+uv run uvicorn app.main:app --reload --port 8000   # run locally (needs Next on :3000 for non-api paths)
+uv run pytest                                      # run tests
+```
+
+Run from the repo root to build and run the whole app in Docker:
+
+```bash
+scripts/start.sh         # build + run the container (start.ps1 on Windows)
+scripts/stop.sh          # stop and remove it (stop.ps1 on Windows)
+```
 
 ## Coding standards (from AGENTS.md)
 
